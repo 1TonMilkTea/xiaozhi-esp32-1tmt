@@ -60,6 +60,7 @@ private:
     static esp_err_t config_post_handler(httpd_req_t *req);
     static esp_err_t api_config_get_handler(httpd_req_t *req);
     static esp_err_t api_config_post_handler(httpd_req_t *req);
+    static esp_err_t api_now_playing_handler(httpd_req_t *req);
 
     // CORS处理
     static esp_err_t cors_handler(httpd_req_t *req);

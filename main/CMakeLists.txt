@@ -395,8 +395,8 @@ elseif(CONFIG_BOARD_TYPE_MOVECALL_MOJI_ESP32S3)
     set(BUILTIN_TEXT_FONT font_puhui_basic_20_4)
     set(BUILTIN_ICON_FONT font_awesome_20_4)
     set(DEFAULT_EMOJI_COLLECTION twemoji_64)
-elseif(CONFIG_BOARD_TYPE_QEBABE_XIAOCHE)
-    set(BOARD_TYPE "qebabe-xiaoche")
+elseif(CONFIG_BOARD_TYPE_1TMT_BANGBANG)
+    set(BOARD_TYPE "1tmt-bangbang")
     set(BUILTIN_TEXT_FONT font_puhui_basic_14_1)
     set(BUILTIN_ICON_FONT font_awesome_14_1)
 elseif(CONFIG_BOARD_TYPE_MOVECALL_MOJI2_ESP32C5)
@@ -606,6 +606,12 @@ file(GLOB BOARD_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/boards/${BOARD_TYPE}/*.c
 )
 list(APPEND SOURCES ${BOARD_SOURCES})
+if(BOARD_TYPE STREQUAL "1tmt-bangbang")
+    file(GLOB BANGBANG_FEATURE_SOURCES
+        ${CMAKE_CURRENT_SOURCE_DIR}/boards/${BOARD_TYPE}/*/*.cc
+    )
+    list(APPEND SOURCES ${BANGBANG_FEATURE_SOURCES})
+endif()
 
 # Select audio processor according to Kconfig
 if(CONFIG_USE_AUDIO_PROCESSOR)

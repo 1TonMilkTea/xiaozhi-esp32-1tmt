@@ -14,6 +14,7 @@
 
 #include <string>
 #include <chrono>
+#include <cstdint>
 
 class Theme {
 public:
@@ -39,6 +40,12 @@ public:
     virtual Theme* GetTheme() { return current_theme_; }
     virtual void UpdateStatusBar(bool update_all = false);
     virtual void SetPowerSaveMode(bool on);
+
+    // Microphone pickup visualizer (no-op on boards without OLED bars)
+    virtual void SetAudioVisualizerEnabled(bool enable);
+    virtual void UpdateAudioVisualizer(uint8_t level);
+    virtual bool IsAudioVisualizerEnabled() const { return false; }
+    virtual void SetNowPlaying(const char* title, const char* artist);
 
     // 动画表情相关方法
     virtual void SetAnimatedEmotionMode(bool enable);

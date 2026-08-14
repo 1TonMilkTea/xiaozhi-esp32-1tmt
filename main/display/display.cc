@@ -55,6 +55,19 @@ void Display::SetPowerSaveMode(bool on) {
     ESP_LOGW(TAG, "SetPowerSaveMode: %d", on);
 }
 
+void Display::SetAudioVisualizerEnabled(bool enable) {
+    (void)enable;
+}
+
+void Display::UpdateAudioVisualizer(uint8_t level) {
+    (void)level;
+}
+
+void Display::SetNowPlaying(const char* title, const char* artist) {
+    (void)title;
+    (void)artist;
+}
+
 void Display::SetAnimatedEmotionMode(bool enable) {
     animated_emotion_mode_ = enable;
     ESP_LOGI(TAG, "Animated emotion mode: %s", enable ? "enabled" : "disabled");

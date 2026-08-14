@@ -5,6 +5,8 @@
 #include "roboeyes_adapter.h"
 
 #include <memory>
+#include <cstdint>
+#include <string>
 
 #include <esp_lcd_panel_io.h>
 #include <esp_lcd_panel_ops.h>
@@ -25,6 +27,15 @@ private:
     lv_obj_t *emotion_label_ = nullptr;
     lv_obj_t* chat_message_label_ = nullptr;
 
+    lv_obj_t* visualizer_ = nullptr;
+    static constexpr int kVisualizerBarCount = 8;
+    lv_obj_t* visualizer_bars_[kVisualizerBarCount] = {};
+    uint8_t visualizer_heights_[kVisualizerBarCount] = {};
+    bool visualizer_enabled_ = false;
+    std::string now_playing_text_;
+
+    void ApplyNowPlayingLocked();
+
     // 动画表情相关
     std::unique_ptr<RoboEyesAdapter> roboeyes_adapter_;
 
@@ -41,6 +52,11 @@ public:
     virtual void SetChatMessage(const char* role, const char* content) override;
     virtual void SetEmotion(const char* emotion) override;
     virtual void SetTheme(Theme* theme) override;
+
+    virtual void SetAudioVisualizerEnabled(bool enable) override;
+    virtual void UpdateAudioVisualizer(uint8_t level) override;
+    virtual bool IsAudioVisualizerEnabled() const override { return visualizer_enabled_; }
+    virtual void SetNowPlaying(const char* title, const char* artist) override;
 
     // 动画表情相关方法
     virtual void SetAnimatedEmotionMode(bool enable) override;

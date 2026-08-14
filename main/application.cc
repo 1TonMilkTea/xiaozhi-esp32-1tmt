@@ -48,7 +48,7 @@
 // - 将服务器下发的情绪（emotion）映射为电机动作并调度执行
 // 注：电机动作通过消息队列发送到 `MotorControlTask` 在单独任务中执行，避免阻塞主循环。
 
-// Motor control functions - only available on qebabe-xiaoche board
+// Motor control functions - only available on 1tmt-bangbang board
 // These are declared as weak externs and will be resolved at link time
 extern "C" void HandleMotorActionForEmotion(const char* emotion) __attribute__((weak));
 extern "C" void (*HandleMotorActionForEmotionPtr)(const char* emotion) __attribute__((weak));
@@ -1655,7 +1655,7 @@ void Application::HandleWebMotorControl(int direction, int speed) {
 }
 
 void Application::SetRealtimeMotorCommand(int direction, int speed) {
-    ESP_LOGI(TAG, "SetRealtimeMotorCommand: direction=%d speed=%d", direction, speed);
+    ESP_LOGD(TAG, "SetRealtimeMotorCommand: direction=%d speed=%d", direction, speed);
 
     // 标记实时控制开启
     realtime_control_active_.store(true);
@@ -1765,7 +1765,7 @@ void Application::SetRealtimeMotorCommand(int direction, int speed) {
 }
 
 void Application::StopRealtimeMotorControl() {
-    ESP_LOGI(TAG, "StopRealtimeMotorControl");
+    ESP_LOGD(TAG, "StopRealtimeMotorControl");
     realtime_control_active_.store(false);
     current_motor_priority_.store(0); // Reset priority
     if (motor_pwm_initialized_member_) {
@@ -1787,6 +1787,26 @@ void Application::StopRealtimeMotorControl() {
     // Removed queue cleanup - now using unified PWM system
     // 重置时间戳
     last_realtime_command_ms_.store(0);
+}
+
+bool Application::PulseMotor(int direction, int speed, int duration_ms) {
+    (void)duration_ms;
+    if (GetDeviceState() != kDeviceStateIdle) {
+        return false;
+    }
+    if (realtime_control_active_.load()) {
+        return false;
+    }
+    current_motor_priority_.store(0);
+    SetRealtimeMotorCommand(direction, speed);
+    return true;
+}
+
+void Application::StopMotor() {
+    if (realtime_control_active_.load() && current_motor_priority_.load() > 0) {
+        return;
+    }
+    StopRealtimeMotorControl();
 }
 
 void Application::InitMotorPwm() {

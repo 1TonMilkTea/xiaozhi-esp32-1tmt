@@ -1,6 +1,8 @@
 #include "audio_service.h"
 #include <esp_log.h>
 #include <cstring>
+#include <cmath>
+#include <algorithm>
 
 #define RATE_CVT_CFG(_src_rate, _dest_rate, _channel)        \
     (esp_ae_rate_cvt_cfg_t)                                  \
@@ -271,6 +273,7 @@ void AudioService::AudioInputTask() {
             int samples = wake_word_->GetFeedSize();
             if (samples > 0) {
                 if (ReadAudioData(data, 16000, samples)) {
+                    UpdateAudioLevel(data);
                     wake_word_->Feed(data);
                     continue;
                 }
@@ -283,6 +286,7 @@ void AudioService::AudioInputTask() {
             int samples = audio_processor_->GetFeedSize();
             if (samples > 0) {
                 if (ReadAudioData(data, 16000, samples)) {
+                    UpdateAudioLevel(data);
                     audio_processor_->Feed(std::move(data));
                     continue;
                 }
@@ -752,6 +756,33 @@ void AudioService::ResetDecoder() {
     audio_playback_queue_.clear();
     audio_testing_queue_.clear();
     audio_queue_cv_.notify_all();
+}
+
+void AudioService::UpdateAudioLevel(const std::vector<int16_t>& data) {
+    if (data.empty()) {
+        audio_level_.store(0);
+        audio_flux_.store(0);
+        return;
+    }
+
+    int64_t acc = 0;
+    size_t step = data.size() > 160 ? data.size() / 80 : 1;
+    int count = 0;
+    for (size_t i = 0; i < data.size(); i += step) {
+        int32_t sample = data[i];
+        acc += static_cast<int64_t>(sample) * sample;
+        count++;
+    }
+    if (count <= 0) {
+        return;
+    }
+
+    int rms = static_cast<int>(std::sqrt(static_cast<double>(acc) / count));
+    int level = std::min(255, rms >> 6);
+    int flux = std::min(255, std::abs(rms - prev_rms_) >> 5);
+    prev_rms_ = rms;
+    audio_level_.store(static_cast<uint8_t>(level));
+    audio_flux_.store(static_cast<uint8_t>(flux));
 }
 
 void AudioService::CheckAndUpdateAudioPowerState() {

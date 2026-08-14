@@ -1,4 +1,6 @@
 #include "web_server.h"
+#include "board.h"
+#include "display.h"
 #include <esp_log.h>
 #include <cstring>
 #include <cJSON.h>
@@ -27,7 +29,7 @@ bool WebServer::Start(int port) {
 
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.server_port = port;
-    config.max_uri_handlers = 10;
+    config.max_uri_handlers = 16;
     // 增加超时设置以更好地处理频繁请求
     config.recv_wait_timeout = 5;  // 接收超时5秒
     config.send_wait_timeout = 5;  // 发送超时5秒
@@ -111,6 +113,14 @@ bool WebServer::Start(int port) {
         .user_ctx  = this
     };
     httpd_register_uri_handler(server_handle_, &api_config_post_uri);
+
+    httpd_uri_t api_now_playing_uri = {
+        .uri       = "/api/now_playing",
+        .method    = HTTP_POST,
+        .handler   = api_now_playing_handler,
+        .user_ctx  = this
+    };
+    httpd_register_uri_handler(server_handle_, &api_now_playing_uri);
 
     ESP_LOGI(TAG, "Web server started successfully");
     return true;
@@ -286,6 +296,47 @@ esp_err_t WebServer::debug_motor_test_handler(httpd_req_t *req) {
             }
         }
     }
+
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_send(req, "{\"status\":\"ok\"}", HTTPD_RESP_USE_STRLEN);
+    return ESP_OK;
+}
+
+esp_err_t WebServer::api_now_playing_handler(httpd_req_t *req) {
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Headers", "Content-Type");
+
+    char content[768];
+    int ret = httpd_req_recv(req, content, sizeof(content) - 1);
+    if (ret <= 0) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "No content");
+        return ESP_FAIL;
+    }
+    content[ret] = '\0';
+
+    cJSON *root = cJSON_Parse(content);
+    if (root == nullptr) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
+        return ESP_FAIL;
+    }
+
+    const char* title = "";
+    const char* artist = "";
+    cJSON* title_json = cJSON_GetObjectItem(root, "title");
+    cJSON* artist_json = cJSON_GetObjectItem(root, "artist");
+    if (cJSON_IsString(title_json)) {
+        title = title_json->valuestring;
+    }
+    if (cJSON_IsString(artist_json)) {
+        artist = artist_json->valuestring;
+    }
+
+    auto display = Board::GetInstance().GetDisplay();
+    if (display != nullptr) {
+        display->SetNowPlaying(title, artist);
+    }
+    cJSON_Delete(root);
 
     httpd_resp_set_type(req, "application/json");
     httpd_resp_send(req, "{\"status\":\"ok\"}", HTTPD_RESP_USE_STRLEN);

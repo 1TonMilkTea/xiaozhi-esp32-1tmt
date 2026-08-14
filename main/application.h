@@ -152,6 +152,8 @@ public:
     void HandleMotorActionWithDuration(int direction, int speed, int duration_ms, int priority = 1);
     void QueueMotorAction(int direction, int speed, int duration_ms, const std::string& description);
     void ExecuteMotorActionQueue();
+    bool PulseMotor(int direction, int speed, int duration_ms);
+    void StopMotor();
 
     /**
      * Reset protocol resources (thread-safe)

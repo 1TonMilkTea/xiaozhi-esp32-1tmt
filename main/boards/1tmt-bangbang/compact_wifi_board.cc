@@ -10,6 +10,7 @@
 #include "lamp_controller.h"
 #include "led/single_led.h"
 #include "assets/lang_config.h"
+#include "sound_follow/sound_follow.h"
 #include <wifi_manager.h>
 
 // Forward declaration for Application function
@@ -121,6 +122,9 @@ private:
                 return;
             }
             app.ToggleChatState();
+        });
+        boot_button_.OnLongPress([]() {
+            SoundFollow::GetInstance().Toggle();
         });
         touch_button_.OnPressDown([]() {
             Application::GetInstance().StartListening();
@@ -321,6 +325,23 @@ private:
             [](const PropertyList& properties) -> ReturnValue {
                 HandleMotorActionForApplication(0, 0, 0, 2); // Stop, high priority
                 return std::string("Motor stopped");
+            });
+
+        mcp_server.AddTool("self.sound_follow.start",
+            "开始麦克风拾音跟随：屏幕显示音量柱状波动，并在空闲时跟随节奏做左右/前后小动作。"
+            "用于对着电脑喇叭或音乐律动。对话开始时会自动暂停动作。",
+            PropertyList(),
+            [](const PropertyList&) -> ReturnValue {
+                SoundFollow::GetInstance().Start();
+                return std::string("拾音跟随已开启，请把设备靠近喇叭");
+            });
+
+        mcp_server.AddTool("self.sound_follow.stop",
+            "停止麦克风拾音跟随，关闭音量柱并停止律动动作。",
+            PropertyList(),
+            [](const PropertyList&) -> ReturnValue {
+                SoundFollow::GetInstance().Stop();
+                return std::string("拾音跟随已关闭");
             });
 
         // Animation actions

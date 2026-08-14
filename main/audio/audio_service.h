@@ -6,6 +6,8 @@
 #include <condition_variable>
 #include <chrono>
 #include <mutex>
+#include <atomic>
+#include <cstdint>
 
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -133,6 +135,10 @@ public:
     void ResetDecoder();
     void SetModelsList(srmodel_list_t* models_list);
 
+    // Microphone pickup level for visualizer / beat follow (0-255)
+    uint8_t GetAudioLevel() const { return audio_level_.load(); }
+    uint8_t GetAudioFlux() const { return audio_flux_.load(); }
+
 private:
     AudioCodec* codec_ = nullptr;
     AudioServiceCallbacks callbacks_;
@@ -178,6 +184,9 @@ private:
     bool voice_detected_ = false;
     bool service_stopped_ = true;
     bool audio_input_need_warmup_ = false;
+    std::atomic<uint8_t> audio_level_{0};
+    std::atomic<uint8_t> audio_flux_{0};
+    int prev_rms_ = 0;
 
     esp_timer_handle_t audio_power_timer_ = nullptr;
     std::chrono::steady_clock::time_point last_input_time_;
@@ -189,6 +198,7 @@ private:
     void PushTaskToEncodeQueue(AudioTaskType type, std::vector<int16_t>&& pcm);
     void SetDecodeSampleRate(int sample_rate, int frame_duration);
     void CheckAndUpdateAudioPowerState();
+    void UpdateAudioLevel(const std::vector<int16_t>& data);
 };
 
 #endif

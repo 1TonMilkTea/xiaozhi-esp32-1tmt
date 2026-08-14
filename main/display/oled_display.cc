@@ -5,6 +5,7 @@
 
 #include <string>
 #include <algorithm>
+#include <cstdlib>
 
 #include <esp_log.h>
 #include <esp_err.h>
@@ -134,6 +135,9 @@ void OledDisplay::Unlock() {
 }
 
 void OledDisplay::SetChatMessage(const char* role, const char* content) {
+    if (visualizer_enabled_) {
+        return;
+    }
     DisplayLockGuard lock(this);
     if (chat_message_label_ == nullptr) {
         return;
@@ -439,6 +443,9 @@ void OledDisplay::UpdateAnimatedEmotion() {
 }
 
 void OledDisplay::SetEmotion(const char* emotion) {
+    if (visualizer_enabled_) {
+        return;
+    }
     // 先调用父类的SetEmotion来处理静态表情
     DisplayLockGuard lock(this);
 
@@ -459,4 +466,141 @@ void OledDisplay::SetEmotion(const char* emotion) {
             lv_label_set_text(emotion_label_, FONT_AWESOME_NEUTRAL);
         }
     }
+}
+
+void OledDisplay::SetAudioVisualizerEnabled(bool enable) {
+    DisplayLockGuard lock(this);
+
+    if (enable == visualizer_enabled_) {
+        return;
+    }
+    visualizer_enabled_ = enable;
+
+    if (enable) {
+        if (emotion_label_ != nullptr) {
+            lv_obj_add_flag(emotion_label_, LV_OBJ_FLAG_HIDDEN);
+        }
+        if (content_right_ != nullptr) {
+            lv_obj_add_flag(content_right_, LV_OBJ_FLAG_HIDDEN);
+        }
+        if (chat_message_label_ != nullptr) {
+            lv_obj_add_flag(chat_message_label_, LV_OBJ_FLAG_HIDDEN);
+        }
+
+        auto screen = lv_screen_active();
+        visualizer_ = lv_obj_create(screen);
+        int top = (height_ >= 64) ? 18 : 16;
+        lv_obj_set_pos(visualizer_, 2, top);
+        lv_obj_set_size(visualizer_, width_ - 4, height_ - top);
+        lv_obj_set_style_bg_opa(visualizer_, LV_OPA_COVER, 0);
+        lv_obj_set_style_bg_color(visualizer_, lv_color_white(), 0);
+        lv_obj_set_style_border_width(visualizer_, 0, 0);
+        lv_obj_set_style_pad_all(visualizer_, 1, 0);
+        lv_obj_set_style_pad_column(visualizer_, 2, 0);
+        lv_obj_set_flex_flow(visualizer_, LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(visualizer_, LV_FLEX_ALIGN_SPACE_EVENLY, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_END);
+        lv_obj_set_scrollbar_mode(visualizer_, LV_SCROLLBAR_MODE_OFF);
+        lv_obj_clear_flag(visualizer_, LV_OBJ_FLAG_SCROLLABLE);
+
+        int bar_area_h = height_ - top - 2;
+        int bar_w = std::max(4, (width_ - 4 - (kVisualizerBarCount + 1) * 2) / kVisualizerBarCount);
+        for (int i = 0; i < kVisualizerBarCount; i++) {
+            visualizer_heights_[i] = 2;
+            visualizer_bars_[i] = lv_obj_create(visualizer_);
+            lv_obj_set_size(visualizer_bars_[i], bar_w, 2);
+            lv_obj_set_style_radius(visualizer_bars_[i], 0, 0);
+            lv_obj_set_style_border_width(visualizer_bars_[i], 0, 0);
+            lv_obj_set_style_bg_opa(visualizer_bars_[i], LV_OPA_COVER, 0);
+            lv_obj_set_style_bg_color(visualizer_bars_[i], lv_color_black(), 0);
+            lv_obj_set_style_pad_all(visualizer_bars_[i], 0, 0);
+            lv_obj_set_scrollbar_mode(visualizer_bars_[i], LV_SCROLLBAR_MODE_OFF);
+            lv_obj_clear_flag(visualizer_bars_[i], LV_OBJ_FLAG_SCROLLABLE);
+            (void)bar_area_h;
+        }
+        ESP_LOGI(TAG, "Audio visualizer enabled");
+        ApplyNowPlayingLocked();
+    } else {
+        if (visualizer_ != nullptr) {
+            lv_obj_del(visualizer_);
+            visualizer_ = nullptr;
+            for (int i = 0; i < kVisualizerBarCount; i++) {
+                visualizer_bars_[i] = nullptr;
+                visualizer_heights_[i] = 0;
+            }
+        }
+        if (emotion_label_ != nullptr) {
+            lv_obj_remove_flag(emotion_label_, LV_OBJ_FLAG_HIDDEN);
+        }
+        if (chat_message_label_ != nullptr) {
+            lv_obj_remove_flag(chat_message_label_, LV_OBJ_FLAG_HIDDEN);
+        }
+        ESP_LOGI(TAG, "Audio visualizer disabled");
+    }
+}
+
+void OledDisplay::UpdateAudioVisualizer(uint8_t level) {
+    if (!visualizer_enabled_ || visualizer_ == nullptr) {
+        return;
+    }
+
+    DisplayLockGuard lock(this);
+    int max_h = std::max(4, height_ - ((height_ >= 64) ? 20 : 18));
+    int center = kVisualizerBarCount / 2;
+
+    for (int i = 0; i < kVisualizerBarCount; i++) {
+        int dist = std::abs(i - center);
+        int target = (static_cast<int>(level) * (kVisualizerBarCount - dist)) / kVisualizerBarCount;
+        target = target * max_h / 255;
+        if (target < 2) {
+            target = 2;
+        }
+        // Peak decay so bars bounce instead of jumping to silence
+        if (target >= visualizer_heights_[i]) {
+            visualizer_heights_[i] = static_cast<uint8_t>(std::min(255, target));
+        } else if (visualizer_heights_[i] > 2) {
+            visualizer_heights_[i] = static_cast<uint8_t>(visualizer_heights_[i] * 3 / 4);
+            if (visualizer_heights_[i] < 2) {
+                visualizer_heights_[i] = 2;
+            }
+        }
+        if (visualizer_bars_[i] != nullptr) {
+            lv_obj_set_height(visualizer_bars_[i], visualizer_heights_[i]);
+        }
+    }
+}
+
+void OledDisplay::ApplyNowPlayingLocked() {
+    const char* text = now_playing_text_.empty() ? "拾音中" : now_playing_text_.c_str();
+    if (status_label_ == nullptr) {
+        return;
+    }
+    lv_label_set_long_mode(status_label_, LV_LABEL_LONG_SCROLL_CIRCULAR);
+    lv_obj_set_width(status_label_, (height_ >= 64) ? LV_HOR_RES : (width_ - 40));
+    lv_label_set_text(status_label_, text);
+    lv_obj_remove_flag(status_label_, LV_OBJ_FLAG_HIDDEN);
+    if (notification_label_ != nullptr) {
+        lv_obj_add_flag(notification_label_, LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
+void OledDisplay::SetNowPlaying(const char* title, const char* artist) {
+    std::string line;
+    bool has_title = title != nullptr && title[0] != '\0';
+    bool has_artist = artist != nullptr && artist[0] != '\0';
+    if (has_title && has_artist) {
+        line = std::string(title) + " - " + artist;
+    } else if (has_title) {
+        line = title;
+    } else if (has_artist) {
+        line = artist;
+    }
+
+    if (line == now_playing_text_) {
+        return;
+    }
+    now_playing_text_ = std::move(line);
+    ESP_LOGI(TAG, "Now playing: %s", now_playing_text_.c_str());
+
+    DisplayLockGuard lock(this);
+    ApplyNowPlayingLocked();
 }
