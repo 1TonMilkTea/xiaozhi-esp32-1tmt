@@ -3,7 +3,6 @@ components/
 managed_components/
 build/
 .vscode/
-.idea/
 .devcontainer/
 sdkconfig.old
 sdkconfig
